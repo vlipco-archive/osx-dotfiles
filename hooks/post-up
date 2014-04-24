@@ -1,2 +1,4 @@
 #!/bin/bash
-echo "All done. Tip: Remember to trigger Yadr's install/update if applicable"
+echo "All done." 
+echo
+echo "Tip: Remember to trigger Yadr's install/update if applicable"

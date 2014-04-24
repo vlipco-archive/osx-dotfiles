@@ -61,19 +61,3 @@ mkrc -t notrack .rbenv # move to tag-notrack folder
 
 At any given time you can `rcdn` to remove all links of anything listed in `lsrc` (handled by rcm). This will also let you see your home folder without the stuff handled by rcm in order to organize it before performing `rcup` again. If you kept a safe copy of all your dotfiles/folders prior to using this repo, this can be a great way to test how `rcup` behaves if you just copy paste the same `.dotfiles` folder to another machine aka. how you'd use a backup of your dotfiles
 
-
-## TOFIX
-
-```
-Cloning into 'vim/bundle/vundle'...
-remote: Reusing existing pack: 2754, done.
-remote: Total 2754 (delta 0), reused 0 (delta 0)
-Receiving objects: 100% (2754/2754), 822.24 KiB | 402.00 KiB/s, done.
-Resolving deltas: 100% (922/922), done.
-Checking connectivity... done.
-Error detected while processing function vundle#config#bundle..<SNR>4_check_bundle_name:
-line    2:
-Vundle error: Name collision for Plugin bogado/file-line.git. Plugin bogado/file-line.git previously used the name "file-line". Skipping Plugin bogado/file-line.git.
-Vundle error: Name collision for Plugin terryma/vim-multiple-cursors. Plugin terryma/vim-multiple-cursors previously used the name "vim-multiple-cursors". Skipping Plugin terryma/vim-multiple-cursors.
-Press ENTER or type command to continue
-```
