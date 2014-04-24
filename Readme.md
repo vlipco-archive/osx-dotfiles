@@ -77,7 +77,3 @@ Vundle error: Name collision for Plugin bogado/file-line.git. Plugin bogado/file
 Vundle error: Name collision for Plugin terryma/vim-multiple-cursors. Plugin terryma/vim-multiple-cursors previously used the name "vim-multiple-cursors". Skipping Plugin terryma/vim-multiple-cursors.
 Press ENTER or type command to continue
 ```
-
-``
-max awesome?
-```

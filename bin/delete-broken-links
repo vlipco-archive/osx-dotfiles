@@ -1,0 +1,2 @@
+#!/bin/bash
+for broken in $(.dotfiles/bin/find-broken-links); do rm $broken; done
