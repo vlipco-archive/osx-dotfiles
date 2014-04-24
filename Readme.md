@@ -18,33 +18,27 @@ Please make sure you have installed the following:
 * Ruby & Rake.
 * Homebrew.
 
-Thoughtbot's rcm is of course required, you can install it with `brew tap thoughtbot/formulae && brew install rcm`
-
 ## First steps
 
+It is advisable to start with a home without dotfiles (move them to a temporary location) and add them back after the initial install.
 
-Clone this repo as `.dotfile` and then simply run `rcup`. Here are the exact commands (uses ssh remote instead of https):
+To install run these from your terminal commands (uses ssh remote instead of https):
 
 ```
+brew tap thoughtbot/formulae
+brew install rcm
 cd $HOME
 git clone --recursive git@github.com:Vlipco/osx-dotfiles.git .dotfiles
 rcup
-```
-
-Keep in mind that if one of the dotfiles already exists, rcm won't complain (as of time of writing). It is therefore advisable to start with a home without dotfile (move them to a temporary location) and then adding them back after the initial `rcup`.
-
-You are now ready to install/update yadr:
-
-```
 cd .yadr
 rake install
 ```
 
 Restart your terminal to see yadr applied.
 
-In `.bin/lsnorc` you can find a simple script that will tell you what files aren't handled by rcm, this could be useful for you to add those to your dotfiles, see usage section for examples.
+run `lsnorc` to find what dotfiles in your home aren't handled by rcm or linked elsewhere, this could be useful for you to know what other dotfiles could be useful in your .dotfiles, see usage section for examples.
 
-By default rcm will use the tag `notrack` in all commands. That tag is use to handle dotfolders that you don't want to track in the repo that don't make sense to have in the host specific dotfile (e.g. installed gems, heroku client, etc.)
+By default rcm will use the tag `notrack` in all commands. That tag is use to handle dotfolders or files that you don't want to track in the repo or that don't make sense to have in the host specific dotfile (e.g. installed gems, heroku client, etc.)
 
 ## Usage
 
