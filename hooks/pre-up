@@ -1,0 +1,9 @@
+#!/bin/bash
+
+ref_rcrc="$HOME/.dotfiles/rcrc"
+home_rcrc="$HOME/.rcrc"
+
+if [[ ! -e "$home_rcrc" ]]; then
+	echo "Linking $ref_rcrc -> $home_rcrc"
+	ln -s $ref_rcrc $home_rcrc
+fi

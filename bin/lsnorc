@@ -1,0 +1,9 @@
+#!/bin/bash
+set -eo pipefail
+
+find_matches_of_type() {
+	find $HOME -maxdepth 1 -name '.[^(DS_Store|Trash|dotfiles)]*' -type $1
+}
+
+find_matches_of_type f
+find_matches_of_type d

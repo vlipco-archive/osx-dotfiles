@@ -1,4 +1,12 @@
-EXCLUDES="Readme.md"
-TAGS="notrassssck"
-DOTFILES_DIRS="$HOME/Dotfiles"
+COMMON_TAGS="notrack"
+XTRA_TAGS_FILE="$HOME/.dotfiles/extra-tags"
+
+if [[ -e "$XTRA_TAGS_FILE" ]]; then
+	TAGS="$COMMON_TAGS $(cat $XTRA_TAGS_FILE)"
+else
+	TAGS="$COMMON_TAGS"
+fi
+
+EXCLUDES="Readme.md extra-tags"
+
 SYMLINK_DIRS="*:*"
