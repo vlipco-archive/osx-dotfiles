@@ -1,0 +1,4 @@
+EXCLUDES="Readme.md"
+TAGS="notrassssck"
+DOTFILES_DIRS="$HOME/Dotfiles"
+SYMLINK_DIRS="*:*"
