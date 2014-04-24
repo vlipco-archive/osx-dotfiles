@@ -1,7 +1,9 @@
 Vlipco's dotfiles for Mac OS X 
 ================
 
-This repository is intended to cloned as `.dotfiles` if your user's home. It contains shared dotfiles and conventions to help you keep your home in order with the help of [rcm](https://github.com/thoughtbot/rcm)
+This repository is intended to cloned as `.dotfiles` if your user's home. It contains shared dotfiles and conventions to help you keep your home in order with the help of [rcm](https://github.com/thoughtbot/rcm).
+
+Tested to work with Mavericks.
 
 ## What's included
 
@@ -21,7 +23,24 @@ Thoughtbot's rcm is of course required, you can install it with `brew tap though
 ## First steps
 
 
-Clone this repo as `.dotfile` and then simply run `rcup`. Keep in mind that if one of the dotfiles already exists, rcm won't complain (as of time of writing). It is therefore advisable to start with a home without dotfile (move them to a temporary location) and then adding them back after the initial `rcup`.
+Clone this repo as `.dotfile` and then simply run `rcup`. Here are the exact commands (uses ssh remote instead of https):
+
+```
+cd $HOME
+git clone --recursive git@github.com:Vlipco/osx-dotfiles.git .dotfiles
+rcup
+```
+
+Keep in mind that if one of the dotfiles already exists, rcm won't complain (as of time of writing). It is therefore advisable to start with a home without dotfile (move them to a temporary location) and then adding them back after the initial `rcup`.
+
+You are now ready to install/update yadr:
+
+```
+cd .yadr
+rake install
+```
+
+Restart your terminal to see yadr applied.
 
 In `.bin/lsnorc` you can find a simple script that will tell you what files aren't handled by rcm, this could be useful for you to add those to your dotfiles, see usage section for examples.
 
@@ -41,3 +60,24 @@ mkrc -t notrack .rbenv # move to tag-notrack folder
 ```
 
 At any given time you can `rcdn` to remove all links of anything listed in `lsrc` (handled by rcm). This will also let you see your home folder without the stuff handled by rcm in order to organize it before performing `rcup` again. If you kept a safe copy of all your dotfiles/folders prior to using this repo, this can be a great way to test how `rcup` behaves if you just copy paste the same `.dotfiles` folder to another machine aka. how you'd use a backup of your dotfiles
+
+
+## TOFIX
+
+```
+Cloning into 'vim/bundle/vundle'...
+remote: Reusing existing pack: 2754, done.
+remote: Total 2754 (delta 0), reused 0 (delta 0)
+Receiving objects: 100% (2754/2754), 822.24 KiB | 402.00 KiB/s, done.
+Resolving deltas: 100% (922/922), done.
+Checking connectivity... done.
+Error detected while processing function vundle#config#bundle..<SNR>4_check_bundle_name:
+line    2:
+Vundle error: Name collision for Plugin bogado/file-line.git. Plugin bogado/file-line.git previously used the name "file-line". Skipping Plugin bogado/file-line.git.
+Vundle error: Name collision for Plugin terryma/vim-multiple-cursors. Plugin terryma/vim-multiple-cursors previously used the name "vim-multiple-cursors". Skipping Plugin terryma/vim-multiple-cursors.
+Press ENTER or type command to continue
+```
+
+``
+max awesome?
+```
