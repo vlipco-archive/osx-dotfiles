@@ -1,3 +1,6 @@
 #!/usr/bin/env ruby
-not_links = %x( find . -maxdepth 1 ! -type l ).split("\n").map {|path| path.gsub! "./", ""}
-not_links.each {|filename| puts filename if filename =~ /\.(?!Trash|dotfiles).+/ }
+not_links = %x( cd $HOME && find . -maxdepth 1 ! -type l ).split("\n")
+not_links.map! {|path| path.gsub! "./", ""}
+exclusions = %w( Trash cache DS_Store dotfiles fasd viminfo zcompdump yankring zhistory )
+non_excluded_dotfile = /^\.(?!#{exclusions.join('|')}).+$/
+not_links.each {|filename| puts filename if filename =~ non_excluded_dotfile }
