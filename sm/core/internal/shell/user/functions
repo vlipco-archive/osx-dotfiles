@@ -1,0 +1,292 @@
+#!/bin/sh
+
+__sm.user.home()
+{
+  typeset _user _line
+  _user="$1"
+  NIY "Printing out User home, based on OS."
+  if __sm.os.type.is darwin
+  then
+    NIY "Determining user home on solaris."
+  elif __sm.os.type.is linux
+  then
+    NIY "Determining user home on darwin."
+  elif __sm.os.type.is solaris
+  then
+    NIY "Determining user home on solaris."
+  else
+    NIY "Determining user home for ${OSTYPE}."
+  fi
+  while read -r _line
+  do
+    if [[ "${_line}" == ${_user}:* ]]
+    then
+      true # extract and print out home
+      break
+    fi
+  done < /etc/passwd
+}
+
+__sm.user.shell()
+{
+  typeset _user _line
+  _user="$1"
+  NIY "Printing out User shell, based on OS."
+  if __sm.os.type.is darwin
+  then
+    NIY "Determining user shell on darwin."
+  elif __sm.os.type.is linux
+  then
+    NIY "Determining user shell on linux"
+    while read -r _line
+    do
+      if [[ "${_line}" == ${_user}:* ]]
+      then
+        echo "${_line//*:}"
+        true # extract and print out shell
+        break
+      fi
+    done < /etc/passwd
+  elif __sm.os.type.is solaris
+  then
+    NIY "Determining user shell on solaris."
+  else
+    NIY "Determining user shell for ${OSTYPE}."
+  fi
+}
+
+__sm.user.set.shell()
+{
+  typeset _user _value
+  _user="$1"
+  _value="$2"
+  # validate via /etc/shells, lines starting with '^/'
+  NIY "Setting user's shell."
+}
+
+__sm.user.set.home()
+{
+  typeset _user _home
+  _user="$1"
+  _home="$2"
+
+  if os is linux
+  then
+    usermod -d ${_home} ${_user}
+  else
+    NIY "non-linux user home setting."
+  fi
+}
+
+__sm.user.exists()
+{
+  typeset _user _flags
+
+  _user="$1"
+  _flags="$2"
+
+  if __sm.string.is.empty "${_user}"
+  then
+
+    return 1
+
+  # At this point _user is expected to be UID numeric or USER login string.
+  elif __sm.string.is.number "${_user}"
+  then # UID
+
+    if __sm.os.type.is darwin
+    then
+      dscl . -list /Users UniqueID | \awk '{print $2;}'
+    else
+      \awk -F: '{print $3;}' /etc/passwd
+    fi | \grep "^${_user}$" >/dev/null || return $?
+
+  else # Name
+
+    if __sm.os.type.is darwin && __sm.string.contains.word "system" "${_flags}"
+    then _user="_${_user#_}"
+    fi
+
+    if __sm.os.type.is darwin
+    then
+      dscl . -list /Users UniqueID | \awk '{print $1;}'
+    else
+      \awk -F: '{print $1;}' /etc/passwd
+    fi | \grep "^${_user}$" >/dev/null || return $?
+
+  fi
+}
+
+__sm.user.create.unless.exists()
+{
+  typeset _system
+
+  if __sm.string.contains.word system "$4"
+  then _system="system"
+  else _system=""
+  fi
+
+  if ! __sm.user.exists "$1" ${_system}
+  then __sm.user.add "$@"
+  fi
+}
+
+__sm.user.add()
+{
+  typeset _user _group _home
+  typeset -a _flags
+
+  _user="$1"
+  _group="$2"
+  _home="$3"
+  _flags=( ${=4} )
+
+  if [[ -z "${_group}" ]]
+  then
+    _group="${_user}"
+  fi
+
+  (( UID == 0 )) || # root user has id 0
+    __sm.log.fail "Users and groups may be manipulated only by the super-user (root), via su or sudo."
+
+  # ##### TODO: Use the os is X functions here instead.
+  case "$(uname)" in
+    "OpenBSD")
+      groupadd "$_group"
+      useradd -g "$_user" "$_user" -s /bin/bash
+      usermod -s /bin/bash "$_user"
+      # how to set home?
+      ;;
+
+    "FreeBSD")
+      pw groupadd -q "$_user"
+      # how to set home?
+      ;;
+
+    "Linux")
+      # groupadd nginx
+      # useradd -G nginx -M nginx
+      if [[ -f "/etc/SuSE-release" ]] ; then
+        groupadd "$_group"
+      else
+        groupadd -f "$_group"
+      fi
+
+      useradd -m -s /bin/bash -d "${_home:-"/home/${_user}"}" -g "${_group}" "${_user}"
+    ;;
+
+    "Darwin")
+      typeset current_max_gid next_gid current_max_uid next_uid
+      mkdir -p "${sm_temp_path}/darwin"
+
+      dscl . -list /Groups gid | awk '{print $2}' | sort -g -r | head -1 > "${sm_temp_path}/darwin/gid"
+      read -r current_max_gid < "${sm_temp_path}/darwin/gid"
+      next_gid=$((current_max_gid+1))
+
+      dscl . -list /Users UniqueID | awk '{print $2}' | sort -g -r | head -1 > "${sm_temp_path}/darwin/uid"
+      read -r current_max_uid < "${sm_temp_path}/darwin/uid"
+      next_uid=$((current_max_uid+1))
+
+      if ! dscl . -list /Users | grep -q "^${_user}$" ; then
+        dscl . -create "/Groups/$_group"
+        dscl . -create "/Groups/$_group" gid "$next_gid"
+        dscl . -create "/Users/${_user}"
+        dscl . -create "/Users/${_user}" PrimaryGroupID "$gid" # UserShell /bin/bash
+        dscl . -create "/Users/${_user}" uid "$next_uid"
+        dscl . -create "/Users/${_user}" realname "Postgresql User"
+        dscl . -create "/Users/${_user}" home "${data_path%\/*}"
+        dscl . -create "/Users/${_user}" shell "/bin/bash"
+        dscl . -create "/Users/${_user}" gid "$gid"
+        dscl . -create "/Users/${_user}" passwd "*"
+      fi
+    ;;
+
+    "SunOS")
+      groupadd "$_group"
+      useradd -g "$_user" -s /bin/bash -d "${data_path}" "$_user"
+      usermod -s /bin/bash "$_user"
+      ;;
+  esac
+}
+
+__sm.user.remove()
+{
+  typeset _user _flags
+  _user="$1"
+  _flags=( ${=2} )
+
+  (( UID == 0 )) || # root user has id 0
+    __sm.log.fail "Users and groups may be manipulated only by the super-user (root), via su or sudo."
+  (
+  # Switch based on the os type.
+  # TODO: Switch these to use the os is X system module DSL
+  case "$(uname)" in
+    "Linux")
+      userdel "${package_user}"
+    ;;
+    "OpenBSD")
+      groupdel "$package_user"
+      userdel -g "$package_user" "$package_user"
+      ;;
+
+    "FreeBSD")
+      pw groupdel -q "$package_user"
+      ;;
+
+    "Darwin")
+      gid="501" # only gids > 500 show up in user preferences.
+
+      # Find an open gid
+      while true; do
+        name=$(dscl . search /groups PrimaryGroupID $gid | cut -f1 -s)
+        if [ -z "$name" ] ; then
+          break
+        fi
+        gid=$[$gid +1]
+      done
+
+      # Create the group
+      dscl . -delete "/Users/${package_user}" PrimaryGroupID "$gid" # UserShell /bin/bash
+      dscl . -delete "/Groups/$package_user"
+      dscl . -delete "/Groups/$package_user" gid "$gid"
+    ;;
+
+    "SunOS")
+      groupdel "$package_user"
+      userdel "$package_user"
+      ;;
+  esac
+  ) || true # Ignore failures with this for now...
+}
+
+__sm.user.is.root()
+{
+  (( UID == __sm_user_id_root ))
+}
+
+__sm.user.is.not.root()
+{
+  (( UID != __sm_user_id_root ))
+}
+
+__sm.user.is.privileged()
+{
+  (( UID < __sm_user_id_users ))
+}
+
+__sm.user.is.unprivileged()
+{
+  (( UID >= __sm_user_id_users ))
+}
+
+__sm.user.is()
+{
+  local _identifier="${1}"
+
+  if [[ "${_identifier}" == "0" ]] || (( _identifier ))
+  then
+    (( UID >= __sm_user_id_users ))
+  else
+    [[ "$USER" == "${_identifier}" ]]
+  fi
+}

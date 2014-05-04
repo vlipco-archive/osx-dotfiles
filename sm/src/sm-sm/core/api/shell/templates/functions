@@ -1,0 +1,116 @@
+#!/bin/sh
+
+template() { templates "$@" ; }
+templates()
+{
+  trace_filter templates || set -o xtrace
+
+  typeset _command _name _target _source _mode _owner _group _template _params \
+    __templates_commands _token _variable _json _json_file
+  typeset -i _append
+  typeset -a _params
+
+  _source="${extension_templates_path}" ; _append=0 ; _mode=0644 ; _owner=$USER
+  _params=()
+  __templates_commands=(
+  "exists=exist"
+  )
+
+  if __sm.command.detect "$*" "${__templates_commands[@]}"
+  then
+    _command="${__sm_command_dotted}"
+    shift "${__sm_command_words}"
+  else
+    __sm.log.fail "No command given.\nUsage:  \npaths <command> ..."
+  fi
+
+  _name="$1"
+  (( $# )) && shift || __sm.log.fail "Template name was not given"
+
+  while (( $# > 0 ))
+  do
+    _token="${1}" && shift
+    case "${_token}" in
+      (to)
+        _target="$1"
+        (( $# )) && shift ||
+          __sm.log.fail "A target filename including path must follow 'to'"
+        ;;
+      (mode)
+        _mode="$1"
+        (( $# )) && shift ||
+          __sm.log.fail "A file mode must follow 'mode'"
+        ;;
+      (owner)
+        _owner="$1"
+        (( $# )) && shift ||
+          __sm.log.fail "An owner name must follow 'owner'"
+        ;;
+      (group)
+        _group="$1"
+        (( $# )) && shift ||
+          __sm.log.fail "A group name must follow 'group'"
+        ;;
+      (from)
+        __sm.log.fail "'from' is no longer supported"
+        ;;
+      (json)
+        _json="${1}"
+        (( $# )) && shift ||
+          __sm.log.fail "A json string must follow 'json'"
+        ;;
+      (json_file)
+        _json_file="${1}"
+        (( $# )) && shift ||
+          __sm.log.fail "A json file location must follow 'json_file'"
+        ;;
+      (with|variables)
+        if [[ "${1}" == "from" ]]
+        then shift && _variable="${1}" && shift
+
+        elif [[ "${1} ${2}" == "variables from" ]]
+        then shift 2 && _variable="${1}" && shift
+        else
+          _params+=("$@")
+          break
+        fi
+        ;;
+      (append)
+        _append=1
+        ;;
+      (*)
+        _params+=("${_token}")
+    esac
+  done
+
+  [[ -n "${_json}" || -n ${_json_file} ]] || _json="{}"
+
+  if [[ -n "${_group}" ]] && ! __sm.string.contains.word ":" "${_owner}"
+  then _owner="${_owner}:${_group}"
+  fi
+
+  case "${_command}" in
+    (install)
+      __sm.templates.install "${_name}" "${_target}" "${_owner}" "${_mode}" \
+        "${_variable}" "${_json}" "${_json_file}" "${_append}" "${_params[@]}"
+      ;;
+    (exist|exists)
+      __sm.templates.exists "${_name}" "${_params[@]}"
+      ;;
+    (seed)
+      __sm.log.fail \
+        "'seed' was removed, please use 'install' with 'variables'."
+      ;;
+    (diff)
+      # change the target, do the actual install then do diff.
+      __sm.templates.diff "${_name}" "${_owner}" "${_mode}" "" "" "" "${_params[@]}"
+      if (( ${#_params[@]} ))
+      then __sm.templates.seed "${_target}" "${_owner}" "${_mode}" "${_params[@]}"
+      fi
+      ;;
+    (*)
+      __sm.log.fail "Unknown command '${_command}' for templates API."
+      ;;
+  esac
+}
+

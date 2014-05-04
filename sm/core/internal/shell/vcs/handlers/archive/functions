@@ -1,0 +1,129 @@
+#!/bin/sh
+
+# ## archive\_get()
+#
+#
+#
+# Code Walkthrough
+archive_get()
+{
+  typeset _uri _final_target _package_checksum _archive _type _sum
+
+  _uri="${1:-}"
+  _final_target="${2:-}"
+  _package_checksum="${3:-${checksum:-#}}"
+  _archive="${archives_path}/${_uri##*/}"
+
+  (( $# )) && shift || __sm.log.fail "uri must be specified as the first parameter."
+  (( $# )) && shift || __sm.log.fail "target path must be specified as the second parameter."
+
+  case "${_uri}" in
+    # fix github archive names
+    (*github.com/*/archive/*.tar.gz)
+      _archive="${_uri#*github.com/}"
+      _archive="${_archive%/archive*}"
+      _archive="${archives_path}/${_archive//\//_}_${_uri##*/}"
+      __sm.log.debug vcs "github tar.gz archive name ${_archive}."
+      ;;
+    (*github.com/*/archive/*.zip)
+      _archive="${_uri#*github.com/}"
+      _archive="${_archive%/archive*}"
+      _archive="${archives_path}/${_archive//\//_}_${_uri##*/}.zip"
+      __sm.log.debug vcs "github zip archive name ${_archive}."
+      ;;
+  esac
+
+  [[ -d "${archives_path}" ]] || mkdir -p "${archives_path}"
+
+  _type="${_package_checksum%,*}" ; _sum="${_package_checksum#*,}"
+
+  if [[ -f "${_archive}" ]] && ! __sm.checksum "${_type}" "${_archive}" "${_sum}" "" ""
+  then
+    __sm.log.debug vcs "${_uri##*/} does not match ${type} checksum ${_sum}; removing and downloading."
+    rm -f "${_archive}"
+  fi
+
+  if [[ ! -f "${_archive}" ]]
+  then
+    if [[ -f "${_uri}" ]]
+    then
+      # TODO: switch to internal, do not call api/ in internal
+      if ! files copy force from "${_uri}" to "${_archive}"
+      then
+        fetch_error copy_failed from=${_uri} to=${_archive}
+      fi
+    else
+      if ${curl} -s -S -L "${_uri}" -o "${_archive}"
+      then
+        : #Download worked
+      else
+        case $? in
+          (60)
+            __sm.log.error "Peer certificate cannot be authenticated with known CA certificates.\n\n\
+Please read 'sm man curl' for instructions how to solve this problem.\n"
+            ;;
+          (*)
+            fetch_error download_failed from=${_uri} to=${_archive}
+            ;;
+        esac
+      fi
+    fi
+  fi
+
+  [[ -z "${__vcs_failed}" ]] || return 0
+
+  rm -rf "${_final_target}" || true
+  mkdir -p "${_final_target}"
+  builtin cd "${_final_target}"
+
+  case "${_uri}" in
+    (*github.com/*/archive/*.tar.gz)
+      LANG=C tar -zxf "${_archive}" 2>&1 | __sm.log.debug vcs -
+      (( ${pipestatus[1]} == 0 )) || fetch_error extracting_archive_failed
+      typeset name_pattern="${_uri#*github.com/*/}"
+      name_pattern="${name_pattern%archive/*}"
+      name_pattern="${name_pattern//\//-}"
+      mv ${name_pattern}*/* .
+      rm -rf ${name_pattern}*
+      ;;
+    (*.tar) # tar
+      LANG=C tar -xf "${_archive}"  2>&1 | __sm.log.debug vcs -
+      (( ${pipestatus[1]} == 0 )) || fetch_error extracting_archive_failed
+      ;;
+    (*.tar.gz|*.tgz) # gzip
+      LANG=C tar -zxf "${_archive}" 2>&1 | __sm.log.debug vcs -
+      (( ${pipestatus[1]} == 0 )) || fetch_error extracting_archive_failed
+      ;;
+    (*.tar.bz2|*.tbz2) # bzip
+      LANG=C tar -jxf "${_archive}" 2>&1 | __sm.log.debug vcs -
+      (( ${pipestatus[1]} == 0 )) || fetch_error extracting_archive_failed
+      ;;
+    (*.tar.xz) # LZMA
+      xz -dc "${_archive}" | tar -xC "${_final_target}" 2>&1 | __sm.log.debug vcs -
+      (( ${pipestatus[1]} == 0 )) || fetch_error extracting_archive_failed
+      ;;
+    (*github.com/*/archive/*.zip)
+      unzip -q "${_archive}" 2>&1 | __sm.log.debug vcs -
+      (( ${pipestatus[1]} == 0 )) || fetch_error extracting_archive_failed
+      typeset name_pattern="${_uri#*github.com/*/}"
+      name_pattern="${name_pattern%archive/*}"
+      name_pattern="${name_pattern//\//-}"
+      mv ${name_pattern}*/* .
+      rm -rf ${name_pattern}*
+      ;;
+    (*.zip)
+      unzip -q "${_archive}" 2>&1 | __sm.log.debug vcs -
+      (( ${pipestatus[1]} == 0 )) || fetch_error extracting_archive_failed
+      ;;
+    (*)
+      #TODO: add detection based on $( file ${_archive} ) type
+      fetch_error unknown_archive_format
+      ;;
+  esac
+
+  [[ -z "${__vcs_failed}" ]] || return 0
+
+  ls -d * >/dev/null 2>&1 || fetch_error empty_archive
+
+  files write string "${_uri}" to "${_final_target}/.uri"
+}

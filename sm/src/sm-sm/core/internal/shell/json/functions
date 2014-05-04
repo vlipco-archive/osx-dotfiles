@@ -1,0 +1,143 @@
+#!/bin/sh
+
+__sm.json.cli()
+{
+  trace_filter json || set -o xtrace
+
+  typeset _token index
+  typeset -a _ignored_args _ext_args
+
+  _ext_args=( $@ )
+
+  for (( index=1 ; index <= ${#_ext_args} ; index++ ))
+  do
+    _token="${_ext_args[$index]}"
+    case "${_token}" in
+      (json_uri|json_file)
+        json_uri="${_ext_args[$((++index))]}"
+        [[ -n "${json_uri}" ]] ||
+          __sm.log.error "a json uri/path must follow keyword '${_token}'"
+        ;;
+      (*)
+        _ignored_args+=("${_token}")
+        ;;
+    esac
+  done
+
+  extension_args=(${_ignored_args})
+}
+
+__sm.json.get()
+{
+  trace_filter json || set -o xtrace
+  typeset _type _path _default _variable _json_uri _json_uri_src _array_name _value
+
+  _json_uri_src="$1" && shift
+  _json_uri="${sm_temp_path}/${_json_uri_src##*/}"
+
+  fetch_uri "${_json_uri_src}" "${_json_uri}" # ensure uri maps to a file.
+
+  if [[ ! -s "${_json_uri}" ]]
+  then # Question: Should we default to an empty json object file?
+    __sm.log.fail "The json file located at '${json_uri}' is empty!"
+  fi
+
+  # TODO: support 'as {variable name}'
+  while (( $# ))
+  do
+    _variable= # Ensure _variable is empty for each next round.
+    _default=  # Ensure _default is empty for each next round.
+    _type="$1" && shift
+    _path="$1" && shift
+    _default=""
+
+    case "${_type}" in
+      (into)
+        _array_name="${_path}"
+        unset ${_array_name}
+        typeset -ga ${_array_name}
+        ;;
+      (string)
+        while :
+        do
+          case "${1}" in
+            (as|variable)
+              _variable="${2}" && shift 2 ||
+                __sm.log.fail "A variable name must follow keyword '${_token}'"
+              ;;
+            (default)
+              _default="$2" && shift 2
+              ;;
+            (*)
+              break
+              ;;
+          esac
+        done
+
+        if [[ -z "${_variable}" ]]
+        then _variable="${_path//\//_}"
+        fi
+
+        typeset -g ${_variable} >/dev/null
+  
+        #if _value="$( "${sm_path}/bin/sm-json" -path "${_path}" -uri "${_json_uri}" )"
+        if _value="$( "${sm_path}/bin/sm-util" -c json -path "${_path}" -uri "${_json_uri}" )"
+        then eval "${_variable}=\"${_value}\""  
+        else eval "${_variable}=\"${_default}\""  
+        fi
+
+        if eval "[[ -z \"\${${_variable}}\" ]]"
+        then eval "${_variable}=\"${_default}\""
+        fi
+
+        if [[ -n "${_array_name}" ]]
+        then eval "${_array_name}+=(${_variable} \"\${${_variable}}\")"
+        fi
+        ;;
+      (array)
+        while :
+        do
+          case "${1}" in
+            (as|variable)
+              _variable="${2}" && shift 2 ||
+                __sm.log.fail "A variable name must follow keyword '${_token}'"
+              ;;
+            (default)
+              _default="$2" && shift 2
+              ;;
+            (*)
+              break
+              ;;
+          esac
+        done
+
+        if [[ -z "${_variable}" ]]
+        then _variable="${_path//\//_}"
+        fi
+
+        typeset -gxa ${_variable} >/dev/null
+
+        #if _value="$( "${sm_path}/bin/sm-json" -path "${_path}" -uri "${_json_uri}" )"
+        if _value="$( "${sm_path}/bin/sm-util" -c json -path "${_path}" -uri "${_json_uri}" )"
+        then eval "${_variable}=\"${_value}\""  
+        else eval "${_variable}=\"${_default}\""  
+        fi 
+
+        if eval "[[ -z \"\${${_variable}}\" ]]"
+        then eval "${_variable}=(\"${_default}\")"
+        fi
+
+        if [[ -n "${_array_name}" ]]
+        then eval "${_array_name}+=(${_variable} \${${_variable}})"
+        fi
+        # TODO: when the value is an array the values should be ',' separated
+        ;;
+    esac
+  done
+}
+
+__sm.json.set()
+{
+  trace_filter json || set -o xtrace
+  NIY
+}

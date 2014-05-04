@@ -1,0 +1,30 @@
+#!/bin/sh
+
+__sm.ini.parse() {
+	local _file
+	_file="$1"
+
+	if [[ -f ${_file} ]]
+	then
+		[[ -s ${_file} ]] || return 0
+		# TODO: Replace with sm-util
+		python ${sm_path}/core/internal/python/pini.py -b ${_file}
+	else
+		log fail "File '${_file}' does not exist."
+	fi
+}
+
+__sm.ini.load() {
+	local _content _keys
+
+	_content=$(__sm.ini.parse "${1}")
+
+	_keys=($( echo ${_content} | sed -e 's/=[^;]*//g' -e 's/;//g'))
+
+	for _key in ${_keys[@]}
+	do typeset -g ${_key}
+	done
+
+	eval "${_content}"
+}
+

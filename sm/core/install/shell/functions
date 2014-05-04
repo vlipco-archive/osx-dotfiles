@@ -1,0 +1,350 @@
+#!/bin/sh
+
+install_initialize()
+{
+  typeset -ga cleanse_paths directories binaries files aux_paths configs
+  cleanse_paths=( external completion modules extensions )
+  directories=( bin )
+  binaries=( sm sm-ll smp )
+  files=( LICENSE VERSION README.md local )
+  aux_paths=( log tmp src )
+  configs=( user ) # TODO: cleanup, this might be irrelevant
+}
+
+perform()
+{
+  paths enter "${sm_path}"
+  "$*"
+}
+
+prepare_for_installation()
+{
+  typeset directory _path
+
+  __sm.log.step "Ensuring that installation target path exists (${install_path})"
+  paths create "${install_path}"
+  paths enter "${install_path}"
+  __sm.log.step success
+
+  for directory in "${cleanse_paths[@]}"
+  do
+    _path="${install_path}/${directory}"
+    if paths exists "${_path}"
+    then
+      [[ "${_path%/}" != "${install_path}" ]] || continue
+      __sm.log.step "Removing old sm component path (${_path})"\
+        rm -rf "${_path}"
+    fi
+  done
+
+  __sm.log.step "Creating install path directories (${directories[*]} ${aux_paths[*]})" \
+  paths create "${directories[@]}" "${aux_paths[@]}"
+}
+
+cleanse_targets()
+{
+  typeset _path _entity _target
+  _path="$1"
+  (( $# )) && shift || __sm.log.fail "Usage:\n\n  cleanse_targets {target} {paths/files under target}"
+  for _entity in "$@"
+  do
+    [[ -n "${_entity}" ]] || continue
+    _target="${_path}/${_entity}"
+    [[ "${_target%/}" != "${install_path}" ]] || continue
+    rm -rf "${_target}"
+  done
+}
+
+install_core()
+{
+  typeset _dir
+
+  __sm.log.step "Installing core directories (${directories[*]})"
+  cleanse_targets "${install_path}" "${directories[@]}"
+  paths copy to "${install_path}/" "${directories[@]}"
+  __sm.log.step success
+
+  __sm.log.step "Installing core files (${files[*]})"
+  cleanse_targets "${install_path}" ${files[@]}
+  files copy to "${install_path}" ${files[@]}
+  __sm.log.step success
+
+  __sm.log.step "Installing core extension set"
+  cleanse_targets "${install_path}/" "core"
+  paths copy to "${install_path}/" "core"
+  __sm.log.step success
+}
+
+install_configuration_files()
+{
+  __sm.log.step "Ensuring configuration files exist (${configs[*]})"
+  for config_file in "${configs[@]}"
+  do
+    files create "${install_path}/config/${config_file}"
+  done
+  __sm.log.step success
+}
+
+setup_shell_completion()
+{
+  typeset _mode _name completion_prefix
+  completion_prefix="${etc_path}/bash_completion.d"
+  _name="sm.bash"
+  _mode="0644"
+
+  if string equals "${DESTROOT:-/}" "/"
+  then paths exists "${completion_prefix}" || return 0
+  else paths create "${completion_prefix}"
+  fi
+
+  templates install "install/sm-completion.sh" \
+    to "${completion_prefix}/${_name}" \
+    variables \
+      sm_path "${install_path/${DESTROOT:-\/}/\/}"
+
+  files chmod "${_mode}" "${completion_prefix}/${_name}"
+}
+
+setup_profile_d()
+{
+  typeset _PATH
+  _PATH="PATH=\"\${PATH}:${install_path/${DESTROOT:-'/'}/\/}/bin:${install_path/${DESTROOT:-'/'}/\/}/pkg/active/bin:${install_path/${DESTROOT:-'/''}/\/}/pkg/active/sbin\""
+
+  if user is root
+  then
+    paths create "${profile_d_path}"
+    if os is darwin
+    then
+      if ! files exist "${etc_path}/profile" ||
+        ! files contain string "${profile_d_path}" "${etc_path}/profile"
+      then
+        templates install "install/etc_profile" \
+          to "${etc_path}/profile" \
+          variables \
+            profile_d_path "${profile_d_path/${DESTROOT:-\/}/\/}"
+      fi
+    fi
+
+    if ! files exist "${profile_d_path}/sm.sh" ||
+      ! files contain string "${install_path}/pkg/active/sbin" "${profile_d_path}/sm.sh"
+    then
+      files write string "${_PATH}" to "${profile_d_path}/sm.sh"
+    fi
+
+    files chmod 0755 "${profile_d_path}/sm.sh"
+  else
+    log "\nNOTE:\n"\
+    "Since you are installing as a user ($USER), in order to ensure that the 'sm' "\
+    "command is available to you add the following to your startup profile:\n"\
+    "    export ${_PATH}\n"\
+    "Then either close the current shell or source the profile file.\n"
+
+    # TODO: Provide a way to do this through the cli but outside the install:
+    #files create "$HOME/.profile" "$HOME/.bashrc" "$HOME/.bash_profile"
+
+    #if ! files contain string "$HOME/.profile" "$HOME/.bashrc"
+    #then
+    #  files write appnd \
+    #    string "if test -s \"$HOME/.profile\" ; then . \"$HOME/.profile\" ; fi"\
+    #    to "$HOME/.bashrc"
+    #fi
+
+    #if ! files contain string  "$HOME/.bashrc" "$HOME/.bash_profile"
+    #then
+    #  files write append \
+    #    string "if test -s \"$HOME/.bashrc\" ; then . \"$HOME/.bashrc\" ; fi"\
+    #    to "$HOME/.bash_profile"
+    #fi
+
+    #if ! files contain string "${profile_d_path}" "$HOME/.profile"
+    #then
+    #  files write append \
+    #    string "\nif test -d '${profile_d_path}' ; then for profile in \"${profile_d_path}\"/*.sh ; do if test -x \"\$profile\" ; then . \"\$profile\" ; fi ; done ; unset profile ; fi" \
+    #    to "$HOME/.profile"
+    #fi
+  fi
+}
+
+set_sm_path()
+{
+  files replace regex "^.*sm_path=.*" \
+    with "sm_path=\"${install_path/${DESTROOT:-\/}/\/}\"" \
+    "${install_path}/bin/sm"
+
+  files replace regex "^sm_path=.*" \
+    with "sm_path=\"${install_path/${DESTROOT:-\/}/\/}\"" \
+    "${install_path}/bin/smp"
+
+  files replace regex "^saved_sm_path=.*" \
+    with "saved_sm_path=\"\${sm_path:-${install_path/${DESTROOT:-\/}/\/}}\"" \
+    "${install_path}/core/sm/shell/core/initialize"
+}
+
+make_binaries_executable()
+{
+  typeset _binary
+  for _binary in "${binaries[@]}"
+  do
+    file chmod 0755 "${install_path}/bin/${_binary}"
+  done
+}
+
+set_binaries_shell()
+{
+  typeset _binary
+  for _binary in local bin/sm bin/smp
+  do
+    file replace \
+      regex "^#!.*$" \
+      with "#!${sm_shell:-/usr/bin/env zsh}" \
+      in "${install_path}/${_binary}"
+  done
+}
+
+create_versionedfs_paths()
+{
+  versionedfs create \
+    path "${install_path}/pkg" strategy fhs method link activate first
+
+  versionedfs create \
+    path "${install_path}/sets" strategy name method copy activate first
+
+  versionedfs create \
+    path "${install_path}/exts" strategy name method copy activate first
+}
+
+get_platform()
+{
+  typeset platform
+  platform="`uname -s`/`uname -m`"
+
+  case $platform in
+    (Darwin/i386|Darwin/x86_64|Linux/i386|Linux/x86_64)
+      echo "$platform"
+      ;;
+    (Linux/i[456]86)
+      echo "Linux/i386"
+      ;;
+    (Linux/armv[67]l)
+      echo "Linux/arm"
+      ;;
+    (*)
+      echo "Unsupported platform: $platform." >&2
+      exit 1
+      ;;
+  esac
+}
+
+install_sm_util()
+{
+  typeset _url _util_version _unm _un _file
+  _un=$(uname  | tr '[A-Z]' '[a-z]')
+  _unm=$(uname -m | sed -e 's/x86_64/amd64/' -e 's/i386|i586|i686/386/')
+  _util_version=0.1.1
+
+  if [[ -s "${install_path}/bin/sm-util" ]]
+  then
+    if file is symlink "${install_path}/bin/sm-util" ||
+      file contains "${install_path}/bin/sm-util" regexp 'perl'
+    then file remove "${install_path}/bin/sm-util"
+    fi
+  fi
+
+  if ! file is executable "${install_path}/bin/sm-util"
+  then
+    file remove "${install_path}/bin/sm-util"
+    __sm.log.step "Downloading sm-util."
+    # TODO: Handle archive extensions based on OS.
+
+    _file="sm-util_${_util_version}_${_un}_${_unm}"
+    _url="https://files.smf.sh/util/${_util_version}/${_file}.tar.gz" || return $?
+    curl -s ${_url} -o "${install_path}/src/${_file}.tar.gz"
+    tar zxf "${install_path}/src/${_file}.tar.gz" -C "${install_path}/src/"
+    cp "${install_path}/src/${_file}/sm-util" "${install_path}/bin/sm-util"
+    file chmod +x "${install_path}/bin/sm-util"
+    file link symbolic force from "${install_path}/bin/sm-util" to "${sm_path}/bin/sm-util"
+    __sm.log.step success
+  fi
+}
+
+install_sm_mustache()
+{
+  typeset _url
+  if [[ -s "${install_path}/bin/sm-mustache" ]]
+  then
+    if file is symlink "${install_path}/bin/sm-mustache" ||
+      file contains "${install_path}/bin/sm-mustache" regexp 'perl'
+    then file remove "${install_path}/bin/sm-mustache"
+    fi
+  fi
+
+  if ! file is executable "${install_path}/bin/sm-mustache"
+  then
+    file remove "${install_path}/bin/sm-mustache"
+    __sm.log.step "Downloading sm-mustache."
+    _url="https://smf.sh/mustache/$(get_platform)/sm-mustache" || return $?
+    curl -s ${_url} -o "${install_path}/bin/sm-mustache"
+    file chmod +x "${install_path}/bin/sm-mustache"
+    file link symbolic force from "${install_path}/bin/sm-mustache" to "${sm_path}/bin/sm-mustache"
+    __sm.log.step success
+  fi
+}
+
+install_sm_json()
+{
+  typeset _url
+  if [[ -s "${install_path}/bin/sm-json" ]]
+  then
+    if file is symlink "${install_path}/bin/sm-json" ||
+      file contains "${install_path}/bin/sm-json" regexp 'perl'
+    then file remove "${install_path}/bin/sm-json"
+    fi
+  fi
+
+  if ! file is executable "${install_path}/bin/sm-json"
+  then
+    file remove "${install_path}/bin/sm-json"
+    __sm.log.step "Downloading sm-json"
+    _url="https://smf.sh/json/$(get_platform)/sm-json" || return $?
+    curl -s ${_url} -o "${install_path}/bin/sm-json"
+    file chmod +x "${install_path}/bin/sm-json"
+    file link symbolic force from "${install_path}/bin/sm-json" to "${sm_path}/bin/sm-json"
+    __sm.log.step success
+  fi
+}
+
+install_sm()
+{
+  log "S{cripting,ystem,tack} Management (SM) Framework (Core) Installation:"
+
+  prepare_for_installation
+
+  perform install_core
+
+  perform install_sm_util
+
+  #perform install_sm_mustache
+
+  #perform install_sm_json
+
+  perform create_versionedfs_paths
+
+  perform set_sm_path
+
+  perform install_configuration_files
+
+  set_binaries_shell
+
+  __sm.log.step "Ensuring that binaries are executable" \
+    make_binaries_executable
+
+  perform setup_profile_d
+
+  if user is root
+  then
+    __sm.log.step "Setting up sm shell completion (${completion_prefix}/${_name})" \
+      perform setup_shell_completion
+  fi
+
+  __sm.log.succeed "S{cripting,ystem,tack} Management (SM) Framework (Core) installed."
+}

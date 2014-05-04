@@ -1,0 +1,127 @@
+#!/bin/sh
+
+#
+# SM Framework Core Module ~ Operating System (os)
+#
+# API Version: 1.0.0
+#
+# files *
+#
+# TODO: Finish this API documentation below
+#
+# os is <linux|darwin|bsd|solaris|aix>
+# os cpu count
+# os open {uri}
+# os name
+# os type
+# os subtype
+# os version
+# os version major
+# os version minor
+# os version patch
+# os arch
+# os arch capable
+#
+os()
+{
+  trace_filter os || set -o xtrace
+
+  typeset _command _os
+  typeset -a _params __os_commands
+
+  __os_commands=(
+    "is=type is"
+    "arch capable"
+    "arch is=arch type is"
+    "arch type"
+    "cpu count"
+    "version major"
+    "version minor"
+    "version patch"
+  )
+
+  if __sm.command.detect "$*" "${__os_commands[@]}"
+  then
+    _command="${__sm_command_dotted}"
+    shift "${__sm_command_words}"
+  else
+    __sm.log.fail "No command given.\nUsage:  \nos <command> ..."
+  fi
+
+  case "${_command}" in
+    (type.is)
+      _os="$1"
+      (( $# )) && shift || __sm.log.fail "System name must follow keywords 'is';"\
+        "os is <linux|darwin|bsd|solaris|aix>"
+      ;;
+    (arch.type.is)
+      _params=( "$1" )
+      (( $# )) && shift || __sm.log.fail "Architecture must follow keywords 'is'"
+      ;;
+    (open)
+      _params=( "$@" )
+      (( $# )) && shift || __sm.log.fail "Files must follow keywords 'open'"
+      ;;
+  esac
+
+  _params+=( "$@" )
+  shift $#
+
+  case "${_command}" in
+    (type.is)
+      case "${_os}" in
+        (linux|bsd|darwin|solaris|aix)
+          __sm.os.type.is ${_os}
+          ;;
+        (*)
+          __sm.log.fail "Unhandled os '${_os}'"
+          ;;
+      esac
+      ;;
+    (arch*|cpu.count|name|open|subtype|type|version*)
+      __sm.os.${_command} "${_params[@]}"
+      ;;
+    (*)
+      __sm.log.fail "Unknown command for os: '${_command}' "\
+        "A os command must be specified as the first parameter: "\
+        "{is,arch,cpu,open,type}"
+      ;;
+  esac
+}
+
+# TODO: Move this function into internal/os
+init_scripts_path()
+{
+  if (( UID == 0 ))
+  then
+    case "$OSTYPE" in
+      (*darwin*)
+        printf "/etc/init.d"
+        ;;
+      (*linux*|*)
+        if [[ -d "/etc/init.d" ]]
+        then
+          printf "/etc/init.d"
+        elif [[ -d "/etc/rc.d" ]]
+        then
+          printf "/etc/rc.d"
+        else
+          __sm.log.fail "Unknown init scripts directory (/etc/init.d or /etc/rc.d not found)."
+        fi
+        ;;
+    esac
+  else
+    printf "$HOME/.init.d"
+  fi
+}
+
+# TODO: Move this function into internal/os
+__sm.os.confd.path()
+{
+  if (( UID == 0 ))
+  then
+    echo "/etc/conf.d"
+  else
+    echo "$HOME/.conf.d"
+  fi
+}

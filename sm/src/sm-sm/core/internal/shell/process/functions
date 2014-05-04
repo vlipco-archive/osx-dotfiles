@@ -1,0 +1,278 @@
+#!/bin/sh
+
+#TODO: old code - validate
+__sm.process.status()
+{
+  typeset _name _pid _ps
+  _name="$1"
+  _pid="$2"
+
+  case "${_pid}" in
+    ([0-9]+)
+    ;;
+    (*)
+      if [[ -n "${_pid}" && -f "${_pid}" ]]
+      then _pid=$(cat ${_pid})
+      else _pid=0
+      fi
+    ;;
+  esac
+
+  log "${name:-"process"}:"
+
+  if (( ${_pid} > 0 ))
+  then
+    _ps=$(ps -p ${_pid} -ostate,sgi_rss,vsize | tail -1)
+
+    log "  status: running"
+    log "  version: ${service_version}"
+    log "  process: "
+    log "    pid: ${_pid}"
+
+    if __sm.os.type.is linux
+    then
+      log "    parent_pid: $(awk  '/^PPid:/{print $2}' /proc/${_pid}/status)"
+      log "    state: $(printf "$_ps" | awk '{print $1}')"
+      log "    rss: $(printf "$_ps" | awk '{print $2}')"
+      log "    vsz: $(printf "$_ps" | awk '{print $3}')"
+    fi
+
+    # TODO: Use /proc for linux and lsof otherwise
+    if __sm.command.exists lsof
+    then
+      typeset cwd binary
+      typeset -a libraries tcp_ports udp_ports sockets logs string
+
+      while read -r line
+      do
+        case "$line" in
+          (*[[:space:]]cwd[[:space:]]*)
+            cwd="${line##* }"
+            ;;
+          (*[[:space:]]txt[[:space:]]*)
+            binary="${line##* }"
+            ;;
+          (*/lib/*)
+            string="${line%% \(*}"
+            libraries+=("${string##* }")
+            ;;
+          (*.log*)
+            logs+=("${line##* }")
+            ;;
+          (*.sock*)
+            sockets+=("${line##* }")
+            ;;
+          (*TCP*)
+            string="${line%% \(*}"
+            tcp_ports+=("${string##* }")
+            ;;
+          (*)
+            true # ignore other lines
+            ;;
+        esac
+      done < <(lsof -U -p ${_pid})
+
+      log "    cwd: ${cwd}"
+      log "    binary: ${binary}"
+
+      if __sm.array.is.nonempty logs
+      then
+        log "    logs:"
+        __sm.array.sort asc logs
+        __sm.array.unique logs
+        __sm.array.each logs 'printf "      - %s\n" "${element}"'
+      fi
+
+      if __sm.array.is.nonempty libraries
+      then
+        log "    libraries:"
+        __sm.array.sort asc libraries
+        __sm.array.unique libraries
+        __sm.array.each libraries 'printf "      - %s\n" "${element}"'
+      fi
+
+      if __sm.array.is.nonempty tcp_ports
+      then
+        log "    tcp_ports:"
+        __sm.array.sort asc tcp_ports
+        __sm.array.unique tcp_ports
+        __sm.array.each tcp_ports 'printf "      - %s\n" "${element}"'
+      fi
+
+      if __sm.array.is.nonempty sockets
+      then
+        log "    sockets:"
+        __sm.array.sort asc sockets
+        __sm.array.unique sockets
+        __sm.array.each sockets 'printf "      - %s\n" "${element}"'
+      fi
+    fi
+  else
+    log "  status: not running."
+  fi
+}
+
+#TODO: old code - validate
+__sm.process.signal()
+{
+  typeset _signal _pid
+  _signal="$1"
+  _pid="$2"
+
+  if [[ -n "${_pid}" ]] && (( _pid > 0 ))
+  then
+    kill -${_signal} ${_pid}
+  else
+    log "Not sending signal ${_signal} to process, as pid is 0 (process not found/running)."
+  fi
+}
+
+#TODO: old code - validate
+#TODO: add lockfile.init, lockfile.unlock, lockfile.finish
+__sm.process.lockfile.lock()
+{
+  typeset _lockfile
+  _lockfile="${1:-}"
+  printf "$$" >> "${_lockfile}" # *Append* current process's pid to the lockfile
+
+  # Now read in the first pidfile from the lockfile.  This means that the first
+  # instance that successfully writes its pid to the lockfile obtains the lock.
+  read -r _pid < "${_lockfile}"
+
+  # If the pidfile read in matches the pid of the current process, then
+  if [[ "${_pid}" != "$$" ]]
+  then
+    __sm.log.debug "Another process already owns the lockfile;"
+    return 1
+  fi
+
+  # The currently running process has the lock; immediately add an on-exit
+  # hook that removes the lockfile when the process exits, thus relinquishing
+  # the filesystem-level lock. This also preserves existing EXIT code.
+  __sm.traps.on.exit "cd '$PWD';rm -f ${_lockfile}"
+
+  return 0 # The lock has been obtained! Proceed with nefarious things!
+}
+
+# start process
+# ex. __sm.process.start NAME TIMEOUT COMMAND ...
+__sm.process.start()
+{
+  typeset _name _pid _counter _counter_value
+  _name="$1"
+  _counter_value="$2"
+  shift 2
+  if __sm.process.is.running "${_name}"
+  then
+    return 0
+  fi
+
+  nohup "$@" </dev/null >"${_name}_out.log" 2>"${_name}_err.log" &
+  _pid=$!
+
+  _counter=${_counter_value}
+  while (( _counter-- )) && __sm.process.pid.running ${_pid}
+  do
+    sleep 1s
+  done
+
+  if __sm.process.pid.running ${_pid}
+  then __sm.process.pid.write "${_name}" ${_pid}
+  else return $?
+  fi
+}
+
+# stop process
+# ex. __sm.process.stop NAME TIMEOUT
+__sm.process.stop()
+{
+  typeset _pid _counter
+  if _pid=$(__sm.process.pid.read "${1}")
+  then
+    _counter=$2
+    while (( _counter-- )) && __sm.process.pid.running ${_pid}
+    do
+      kill ${_pid}
+      sleep 1s
+    done
+    if __sm.process.pid.running ${_pid}
+    then
+      kill -9  ${_pid}
+    fi
+    if ! __sm.process.pid.running ${_pid}
+    then
+      __sm.process.pid.write "${1}"
+    fi
+  else return 0
+  fi
+}
+
+# stop if running ; start
+# ex. __sm.process.restart NAME TIMEOUT_START TIMEOUT_STOP COMMAND ...
+__sm.process.restart()
+{
+  typeset _name _counter_start _counter_stop
+  _name="$1"
+  _counter_start="$2"
+  _counter_stop="$3"
+  shift 3
+
+  if __sm.process.stop "${_name}" ${_counter_stop}
+  then true #continue
+  else return $?
+  fi
+
+  if __sm.process.start "${_name}" ${_counter_start} "$@"
+  then return 0
+  else return $?
+  fi
+}
+
+# Check if a process with a given NAME is working
+# ex. __sm.process.is.running NAME
+__sm.process.is.running()
+{
+  typeset _pid
+  if _pid=$(__sm.process.pid.read "$1")
+  then
+    if __sm.process.pid.running ${_pid}
+    then return 0
+    else return $?
+    fi
+  else return $?
+  fi
+}
+
+## Private?
+
+# read a pid from pid file NAME
+# ex. __sm.process.pid.read NAME
+__sm.process.pid.read()
+{
+  if cat ".${1}.pid" 2>/dev/null
+  then return 0
+  else return $?
+  fi
+}
+
+# write a PID to pid file NAME
+# ex: __sm.process.pid.write NAME PID
+# delete pid file NAME if no PID
+# ex: __sm.process.pid.write NAME
+__sm.process.pid.write()
+{
+  if [[ -n "${2:-}" ]]
+  then echo "$2" > ".${1}.pid" 2>/dev/null
+  else rm -f ".${1}.pid" 2>/dev/null
+  fi
+}
+
+# Check if a process with a given PID is working
+# ex. __sm.process.pid.running PID
+__sm.process.pid.running()
+{
+  if kill -0 $1 2>/dev/null
+  then return 0
+  else return $?
+  fi
+}

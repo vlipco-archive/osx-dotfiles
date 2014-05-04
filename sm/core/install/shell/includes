@@ -1,0 +1,8 @@
+api/files
+api/paths
+api/vcs
+api/user
+cli/sets
+api/extensions/cache
+api/templates
+api/string

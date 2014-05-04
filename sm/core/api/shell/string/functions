@@ -1,0 +1,114 @@
+#!/bin/sh
+
+#
+# SM Framework Core Module ~ String (string)
+#
+
+## Space separated strings
+# string contains {string} {content}
+# string contains key {key_name} {content}
+#
+## Normal strings detection
+# string ematch {string} {content}
+# string ends [with] {string} {content}
+# string starts [with] {string} {content}
+# string is empty {string}
+# string is number {string}
+# string starts with one of {string} {search} {search} ...
+#
+## Normal strings transform
+# string number of words {string} {string} ...
+# string from function name {function_name}
+# string to function name {string}
+#
+string()
+{
+  trace_filter string || set -o xtrace
+
+  typeset _token _command _string _search _other
+  typeset -a __commands _searches
+
+  __commands=(
+    "contains.key"
+    "ends with=ends"
+    "from function name"
+    "is number"
+    "is empty"
+    "match=contains"
+    "to function name"
+    "starts with=starts"
+    "starts with one of"
+    "count words=number of words"
+  )
+
+  if __sm.command.detect "$*" "${__commands[@]}"
+  then
+    _command="${__sm_command_dotted}"
+    shift "${__sm_command_words}"
+  else
+    __sm.log.fail "Array command not given: array <command> [options]..."
+  fi
+
+  case "${_command}" in
+    (ematch|contains|ends|starts)
+      _search="$1"
+      (( $# )) && shift || __sm.log.fail "Search term must follow '${__sm_command_detected}'."
+      _string="$1"
+      (( $# )) && shift || __sm.log.fail "Content must follow '${__sm_command_detected} \"${_search}\"'."
+      ;;
+    (equals|different)
+      _string="$1"
+      (( $# )) && shift || __sm.log.fail "String must follow '${__sm_command_detected}'."
+      _other="$1"
+      (( $# )) && shift || __sm.log.fail "Other string must follow '${__sm_command_detected} \"${_string}\"'."
+      ;;
+    (contains.key)
+      _search="$1"
+      (( $# )) && shift || __sm.log.fail "Key name must follow '${__sm_command_detected}'."
+      _string="$1"
+      (( $# )) && shift || __sm.log.fail "Content must follow '${__sm_command_detected} \"${_search}\"'."
+      ;;
+    (starts.with.one.of)
+      _string="$1"
+      (( $# )) && shift || __sm.log.fail "Content must follow '${__sm_command_detected}'."
+      _searches=( "$@" )
+      (( $# )) && shift $# || __sm.log.fail "Search terms must follow '${__sm_command_detected} \"${_string}\"'."
+      ;;
+    (number.of.words)
+      _string="$*"
+      (( $# )) && shift $# || __sm.log.fail "Strings must follow '${__sm_command_detected}'."
+      ;;
+    (from.function.name)
+      _string="$1"
+      (( $# )) && shift || __sm.log.fail "Function name must follow '${__sm_command_detected}'."
+      ;;
+    (to.function.name|is.*)
+      _string="$1"
+      (( $# )) && shift || __sm.log.fail "String must follow '${__sm_command_detected}'."
+      ;;
+  esac
+
+  case "${_command}" in
+    (contains*|ends|starts)
+      __sm.string.${_command} "${_search}" "${_string}" || return $?
+      ;;
+    (ematch)
+      __sm.string.${_command} "${_string}" "${_search}" || return $?
+      ;;
+    (equals|different)
+      __sm.string.${_command} "${_string}" "${_other}" || return $?
+      ;;
+    (is.*)
+      __sm.string.${_command} "${_string}" || return $?
+      ;;
+    (starts.with.one.of)
+      __sm.string.${_command} "${_string}" "${_searches[@]}" || return $?
+      ;;
+    (number.of.words|*.function.name)
+      __sm.string.${_command} "${_string}"
+      ;;
+    (*)
+      __sm.log.fail "Unknown string command '${_command}'"
+      ;;
+  esac
+}

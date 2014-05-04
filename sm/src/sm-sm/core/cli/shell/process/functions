@@ -1,0 +1,96 @@
+#!/usr/bin/env zsh
+
+process_start()
+{
+  log step "Starting $1" \
+    process start \
+    name $1 \
+    timeout 10 \
+    command "$@"
+}
+
+process_silent_start()
+{
+  if process start \
+    name $1 \
+    timeout 10 \
+    command "$@"
+  then return 0
+  else return $?
+  fi
+}
+
+process_stop()
+{
+  log step "Stoping $1" \
+    process stop \
+    name $1 \
+    timeout 10
+}
+
+process_restart()
+{
+  log step "Stoping $1" \
+    process stop \
+    name $1 \
+    timeout 10
+  log step "Starting $1" \
+    process start \
+    name $1 \
+    timeout 10 \
+    command "$@"
+}
+
+process_running()
+{
+  log step "$1 ..."
+  if
+    process running name $1
+  then
+    log_step_message="$1 running."
+    log step succ
+  else
+    typeset _status=$?
+    log_step_message="$1 not running"
+    log step fail
+    return ${_status}
+  fi
+}
+
+process_schedule()
+{
+  log step "Adding to cron every 5 minutes check $1"
+  if {
+    if which $1 | grep rvm >/dev/null
+    then rvm env --cron
+    fi
+    echo "*/5 * * * * cd \"$PWD\" ; \"$(which sm)\" process start silent $*"
+  } | cron edit group $1
+  then log step succ
+  else
+    typeset _status=$?
+    log step fail
+    return ${_status}
+  fi
+}
+
+process_unschedule()
+{
+  log step "Removing from cron checking $1" \
+    cron remove group $1
+}
+
+process_scheduled()
+{
+  log step "$1 ..."
+  if cron group $1 | grep "" >/dev/null
+  then
+    log_step_message="$1 scheduled."
+    log step succ
+  else
+    typeset _status=$?
+    log_step_message="$1 not scheduled"
+    log step fail
+    return ${_status}
+  fi
+}

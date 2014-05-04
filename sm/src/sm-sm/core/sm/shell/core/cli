@@ -1,0 +1,140 @@
+#!/bin/sh
+
+set +o nounset
+set +o noclobber
+
+: \
+  ${debug_flags:="-search"} ${debug_flag:=0} \
+  ${trace_flags:="-search -backtrace"} ${trace_flag:=0} \
+  ${verbose_flag:=0} \
+  ${var_debug_type_flag:="long"}
+
+typeset -a var_debug_flags trace_functions
+
+while (( $# > 0 ))
+do
+  token="$1"
+  case "$token" in
+    (--help)
+      shift #end of processing
+      extension_args=("cli" "help" "$@")
+      break
+      ;;
+
+    (-v|--version|-V)
+      shift #end of processing
+      extension_args=("cli" "version" "${token}" "$@")
+      break
+      ;;
+
+    (--trace)
+      trace_flags+=" action"
+      ;;
+
+    (--trace=*)
+      trace_flags+=" ${token##--trace\=}"
+      ;;
+
+    (--trace-fun=*)
+      trace_functions+=( ${token##--trace-fun\=} )
+      ;;
+
+    (--trace-var=*)
+      var_debug_flags+=( "${token##--trace-var\=}" )
+      ;;
+
+    (--trace-var-*)
+      var_debug_type_flag="${token##--trace-var-}"
+      ;;
+
+    (--verbose)
+      verbose_flag=1
+      ;;
+
+    (--debug)
+      debug_flags+=" all"
+      debug_flag=1
+      ;;
+
+    (--debug=*)
+      debug_flags+=" ${token##--debug\=}"
+      debug_flag=1
+      ;;
+
+    (--ext-path) # No argument defaults to cwd
+      extensions_search_paths_here="$initial_pwd"
+      ;;
+
+    (--ext-path=*)
+      extensions_search_paths_here="${token##--ext-path\=}"
+      ;;
+
+    (--exts-path=*)
+      exts_user_path="${token##--exts-path\=}"
+      ;;
+
+    (--sets-path=*)
+      sets_user_path="${token##--sets-path\=}"
+      ;;
+
+    (--include=*)
+      preload_modules+=( ${token##--include\=} )
+      ;;
+
+    (--includes=*)
+      preload_modules+=( ${token##--includes\=} )
+      ;;
+
+    (--call=*)
+      call_action="${token##--call\=}"
+      [[ "$call_action" =~ \/ ]] && preload_modules+=( ${call_action%/*} ) || true
+      call_action="${call_action##*/}"
+      ;;
+
+    (--force)
+      export force_flag=1
+      ;;
+
+    (--)
+      shift # end of processing.
+      extension_args=("$@")
+      break
+      ;;
+
+    (-*)
+      printf "ERROR: unknown flag: '${token}'.\n"
+      ;;
+
+    (*)
+      if [[ -z "$sm_script" ]] && [[ -f "$token" || "$token" == / ]]
+      then
+        sm_script=$1
+      else
+        extension_args=("$@")
+        break
+      fi
+      ;;
+  esac
+  shift
+done
+
+if (( $# == 0 )) && [[ -z "$extension_args" ]]
+then
+  extension_args=()
+fi
+
+PS4="+%x:%I %N():%i > "
+
+export PS4
+
+if [[ " ${trace_flags} " =~ " all " ]]
+then
+  trace_flag=1
+  set -x
+fi
+
+debug_flags="${debug_flags## }"
+trace_flags="${trace_flags## }"
+
+export debug_flag debug_flags trace_flag trace_flags verbose_flag extension_args \
+  sm_script var_debug_flags var_debug_type_flag

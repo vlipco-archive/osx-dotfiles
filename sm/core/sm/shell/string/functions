@@ -1,0 +1,121 @@
+#!/bin/sh
+
+# Simple matching string
+__sm.string.contains()
+{
+  __sm.string.match "$@"
+}
+
+# Checks if string contains a word
+__sm.string.contains.word()
+{
+  [[ " $2 " =~ " $1 " ]]
+}
+
+
+# Checks if string contains a key
+__sm.string.contains.key()
+{
+  [[ " $2 " =~ " $1=" ]]
+}
+
+__sm.string.starts()
+{
+  case "$2" in
+    ($1*) return 0 ;;
+  esac
+  return 1
+}
+
+__sm.string.starts.with.one.of()
+{
+  __string=$1
+  shift
+  while (( $# ))
+  do
+    if __sm.string.starts "$1" "${__string}"
+    then
+      __sm_string_starts_with="$1"
+      return 0
+    fi
+    shift
+  done
+  return 1
+}
+
+__sm.string.ends()
+{
+  case "$2" in
+    (*$1) return 0 ;;
+  esac
+  return 1
+}
+
+__sm.string.number.of.words()
+{
+  typeset _words
+  _words=( ${\=*} )
+  printf "${#_words}\n"
+}
+
+__sm.string.to.function.name()
+{
+  typeset __string
+  __string=$*
+  printf "${__string// /.}\n"
+}
+
+__sm.string.from.function.name()
+{
+  printf "${1//./ }\n"
+}
+
+__sm.string.match()
+{
+  [[ "$2" =~ "$1" ]]
+}
+
+__sm.string.ematch()
+{
+  typeset _value _regex _result
+  _value="$1"
+  _regex="$2"
+
+  # Use grep for extended regexp.
+  echo "${_value}" | grep -qE "${_regex}"
+  _result=$?
+  case ${_result} in
+    (0|1)
+      # 0 & 1 are correct results.
+      return ${_result}
+      ;;
+    (*)
+      __sm.log.fail "grep returned unknown error code: ${_result}"
+      ;;
+  esac
+}
+
+__sm.string.equals()
+{
+  [[ "$1" == "$2" ]]
+}
+
+__sm.string.different()
+{
+  [[ "$1" != "$2" ]]
+}
+
+__sm.string.is.number()
+{
+  if [[ -n "$1" ]]
+  then
+    [[ "$1" == "0" ]] ||  (( $1 ))
+  else
+    return 1
+  fi
+}
+
+__sm.string.is.empty()
+{
+  [[ -z "$1" ]]
+}

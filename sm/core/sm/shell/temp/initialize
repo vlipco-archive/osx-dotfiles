@@ -1,0 +1,9 @@
+#!/bin/sh
+
+typeset -gx sm_temp_path
+sm_temp_path="${TMP_PATH:-/tmp}/sm-tmp-$$"
+
+mkdir -p "${sm_temp_path}"
+
+# this will be automatically included in internal/traps
+trap "rm -rf \"${sm_temp_path}\"" EXIT

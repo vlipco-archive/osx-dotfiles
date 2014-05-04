@@ -1,0 +1,141 @@
+#!/bin/sh
+
+#
+# SM Framework Core Module ~ Array (array)
+#
+# API Version: 1.0.0
+#
+# array {command} {params...}
+#
+# where command is one of:
+#
+#   is empty
+#   is nonempty
+#   is even
+#   length
+#   last
+#   first
+#   push
+#   pop
+#   append
+#   shift
+#   unshift
+#   join
+#   largest
+#   sort desc
+#   sort asc
+#   unique
+#
+#   start     # index of first element
+#
+#   each '{array name}' '{command(s) to run for each element}',
+#   default variable name is '$element'
+#     $ includes api/array; a=(1 2 3 4); array each a 'echo $element'
+#
+#   each '{array name}' [as {variable name}] '{command(s) to run for each element}'
+#     $ includes api/array; a=(1 2 3 4); array each a as number 'echo $number'
+#
+array()
+{
+  trace_filter array || set -o xtrace
+
+  typeset _token _command _subcommand _name _variable _elements _separator \
+    _prefix _suffix _index
+
+  typeset -a __commands
+
+  __commands=(
+    "is empty"
+    "is nonempty"
+    "is even"
+    "sort asc"
+    "sort desc"
+    "sort=sort asc"
+  )
+
+  if __sm.command.detect "$*" "${__commands[@]}"
+  then
+    _command="${__sm_command_dotted}"
+    shift "${__sm_command_words}"
+  else
+    __sm.log.fail "Array command not given: array <command> [options]..."
+  fi
+
+  _elements=()
+  _index=0
+
+  while (( $# ))
+  do
+    _token="$1" && shift
+    case "${_token}" in
+      (index)
+        _index=1
+        ;;
+      (element)
+        _index=0
+        ;;
+      (name)
+        _name="$1"
+        (( $# )) && shift || __sm.log.fail "Array name missing:  array unshift {name} [{variable}]"
+        ;;
+      (separator)
+        _separator="$1"
+        (( $# )) && shift || __sm.log.fail "A string separator must follow keyword 'separator'"
+        ;;
+      (prefix)
+        _prefix="$1"
+        (( $# )) && shift || __sm.log.fail "A string prefix must follow keyword 'prefix'"
+        ;;
+      (variable|as|into)
+        _variable="$1"
+        (( $# )) && shift || __sm.log.fail "A variable name must follow keyword '${_token}'"
+        ;;
+      (suffix)
+        _suffix="$1"
+        (( $# )) && shift || __sm.log.fail "A string suffix must follow keyword 'suffix'"
+        ;;
+      (run|do)
+        _subcommand="$1"
+        (( $# )) && shift || __sm.log.fail "A subcommand to run must follow keyword '${_token}'"
+        ;;
+      (*)
+        if [[ -z "${_name}" ]]
+        then
+          _name="${_token}"
+        else
+          _elements+=("${_token}")
+        fi
+        ;;
+    esac
+  done
+
+  if [[ -z "${_name}"  && "${_command}" != "start" ]]
+  then
+   __sm.log.fail "Array name missing:  array ${_command} {name}"
+  fi
+
+  case "${_command}" in
+    (first|last)
+      __sm.array.${_command} "${_name}" "${_variable}" "${_index}"
+      ;;
+    (is*|sort*|length|largest|unique|pop|shift)
+      __sm.array.${_command} "${_name}" "${_variable}"
+      ;;
+    (push|append|unshift)
+      __sm.array.${_command} "${_name}" "${_elements[@]}"
+      ;;
+    (join|print)
+      __sm.array.join "${_name}" "${_separator}" "${_prefix}" "${_suffix}"
+      ;;
+    (each)
+      __sm.array.${_command} "${_name}" "${_subcommand}" "${_variable:-}"
+      ;;
+    (start)
+      echo ${__sm_array_start}
+      ;;
+    (*)
+      __sm.log.fail "Unknown array command '${_command}'"
+      ;;
+  esac
+}
+

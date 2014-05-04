@@ -1,0 +1,21 @@
+#!/bin/sh
+
+api_package_extension_setup()
+{
+  typeset _extension _module _path _template
+  _extension="${1}"
+  _module="${2}"
+  _path="${3:-"${extensions_development_path}/${_extension}"}"
+
+  if [[ ! -s "${_path}/shell/functions" ]]
+  then
+    echo "#!/bin/sh" > "${_path}/shell/functions"
+  fi
+
+  for _template in config/defaults config/checksum shell/functions
+  do
+    template install ${_module}/ext/${_template} \
+      append to "${_path}/${_template}" \
+      extension "${_extension}"
+  done
+}

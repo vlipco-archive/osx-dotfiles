@@ -1,0 +1,85 @@
+#!/usr/bin/env zsh
+
+extension_args=()
+
+while (( $# ))
+do
+  case "$1" in
+    (--trace|trace)
+      extension_args+=("--trace=all")
+      shift
+      ;;
+    (--verbose=*)
+      extension_args+=("--verbose")
+      shift
+      ;;
+    (--prefix=*)
+      prefix_path="${1/*\=}"
+      shift
+      ;;
+    (--zsh|--shell)
+      export sm_shell="$2"
+      shift 2
+      ;;
+    (--prefix|prefix)
+      prefix_path="$2"
+      if ! shift 2
+      then
+        echo "ERROR: A prefix path must be followed by keyword 'prefix'."
+        exit 1
+      fi
+      ;;
+    (DESTROOT=)
+      DESTROOT="${1/*\=}"
+      shift
+      ;;
+    (DESTROOT)
+      DESTROOT="$2"
+      if ! shift 2
+      then
+        echo "ERROR: A DESTROOT path must be followed by keyword 'DESTROOT'."
+        exit 1
+      fi
+      ;;
+    (*)
+      extension_args+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "${sm_shell:-}" ]] && ! command -v zsh >/dev/null
+then
+  echo "ERROR: ZSH is required for SM."
+  exit 1
+fi
+
+if [[ -n "${prefix_path}" ]]
+then
+  sm_path="${DESTROOT:-}${prefix_path}/sm"
+
+elif [[ -z "${sm_path:-}" ]]
+then
+  if (( UID ))
+  then
+    sm_path="${DESTROOT:-/}${HOME#/}/.sm"
+  else
+    sm_path="${DESTROOT:-/}opt/sm"
+  fi
+fi
+
+# set BDSM basic paths
+export sm_path install_path archives_path scm_path src_path sets_user_path DESTROOT
+install_path="${sm_path}" # Path to install everything to.
+archives_path="${sm_path}/archives"
+scm_path="${sm_path}/scm"
+src_path="${sm_path}/src"
+sets_user_path="${sm_path}/sets"
+exts_user_path="${sm_path}/exts"
+
+if [[ -n "${sm_shell:-}" ]]
+then
+  exec "${sm_shell}" "${PWD}/local" --call=install/install_sm "${extension_args[@]}"
+else
+  exec               "${PWD}/local" --call=install/install_sm "${extension_args[@]}"
+fi

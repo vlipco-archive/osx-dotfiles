@@ -1,0 +1,6 @@
+#!/bin/sh
+
+__sm.package.exports
+
+typeset -g packages_path extension_patches_path
+typeset -ga fhs_dirs

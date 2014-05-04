@@ -1,0 +1,67 @@
+#!/usr/bin/env zsh
+
+__sm.log.piece.tree()
+{
+  trace_filter log || set -o xtrace
+  typeset __message _unicode _ident __status
+  __message="${1:-}"
+  _unicode=0
+  true ${COLUMNS:=80}
+
+  case "${__message}" in
+    fail*)
+      log_step_messages_last_level=$(( ${#log_step_messages[*]} ))
+      printf "\r%${COLUMNS}s\r" " "
+      _ident=$(( ${#log_step_messages[*]} * 2 ))
+      __sm.array.pop log_step_messages __message
+      printf "%${_ident}s[${sm_color_red:-}${log_step_fail_char:-X}${sm_color_reset:-}] %s\n" " " "${__message:-"done"}!"
+      ;;
+    succ*)
+      log_step_messages_last_level=$(( ${#log_step_messages[*]} ))
+      printf "\r%${COLUMNS}s\r" " "
+      _ident=$(( ${#log_step_messages[*]} * 2 ))
+      __sm.array.pop log_step_messages __message
+      printf "%${_ident}s[${sm_color_green:-}${log_step_succ_char:-V}${sm_color_reset:-}] %s\n" " " "${__message:-"done"}"
+      ;;
+    *)
+      __sm.array.push log_step_messages "${__message}"
+      if (( log_step_messages_last_level != ${#log_step_messages[*]} ))
+      then printf "\n"
+      fi
+      _ident=$(( ${#log_step_messages[*]} * 2 ))
+      printf "%${_ident}s[ ] %s " " " "${__message}..."
+      log_step_messages_last_level=$(( ${#log_step_messages[*]} ))
+      ;;
+  esac >&7
+}
+
+__sm.log.step.tree()
+{
+  trace_filter log || set -o xtrace
+  typeset _message _log_file _status
+
+  _message="${1:-}"
+  (( $# > 1 )) || log fail "Missing command!"
+  shift
+
+  [[ -d "${sm_temp_path}/steps" ]] || mkdir "${sm_temp_path}/steps"
+  _log_file="${sm_temp_path}/steps/$$.${outlog_step_messages_last_level}.log"
+  touch "${_log_file}"
+
+  __sm.log.piece.tree "${_message}"
+  if "$@" > "${_log_file}" 2>&1
+  then
+    __sm.log.piece.tree succ
+    if [[ -s "${_log_file}" ]]
+    then cat "${_log_file}" >&5
+    fi
+    return 0
+  else
+    _status="$?"
+    __sm.log.piece.tree fail
+    if [[ -s "${_log_file}" ]]
+    then cat "${_log_file}" >&6
+    fi
+    return ${_status} # pass __sm.log.error return status code up !
+  fi
+}
